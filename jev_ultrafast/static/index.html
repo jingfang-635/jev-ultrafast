@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
@@ -10,7 +10,7 @@
   </head>
   <body>
     <header>
-      <a href="/" aria-label="Homepage" class="brand"
+      <a href="/" aria-label="主页" class="brand"
         >browser<span>use</span> <i>×</i> TypeSafe</a
       >
       <div class="local"><span class="dot"></span> Jev Ultrafast</div>
@@ -18,45 +18,45 @@
     <main>
       <section class="intro">
         <div>
-          <p class="eyebrow">A BROWSER THAT CHOOSES</p>
-          <h1>Every page is a set of possibilities.</h1>
+          <p class="eyebrow">会自己选择的浏览器</p>
+          <h1>每个页面都是一组可能性。</h1>
           <p>
-            Jev picks the next action. A small language model handles the words.
-            <a href="/demo.mp4" target="_blank" rel="noopener">Watch the real Google Flights run ↗</a>
+            Jev 负责选择下一步操作，一个小语言模型负责生成文字。
+            <a href="/demo.mp4" target="_blank" rel="noopener">观看真实的 Google Flights 运行 ↗</a>
           </p>
         </div>
-        <div class="model-tag">jev-latest <span>+ text helper</span></div>
+        <div class="model-tag">jev-latest <span>+ 文本助手</span></div>
       </section>
       <form id="task-form">
         <div class="task-label">
-          <label for="goal">Give it a task</label
-          ><select id="scenario" name="scenario" aria-label="Demo scenario">
-            <option value="flights">Google Flights · real web</option>
-            <option value="travel">Travel planner · fixture</option>
-            <option value="research">Reading room · fixture</option>
+          <label for="goal">给它一个任务</label
+          ><select id="scenario" name="scenario" aria-label="演示场景">
+            <option value="flights">Google 航班 · 真实网页</option>
+            <option value="travel">旅行规划 · 示例页面</option>
+            <option value="research">阅读室 · 示例页面</option>
           </select>
         </div>
         <div class="task-row">
           <textarea id="goal" name="goal" rows="5">
 Find one-way flights from Zurich to London on September 20, 2026, for one adult in economy. Stop when matching flight options are visible. Do not select or book a flight.</textarea
           ><button type="submit" id="start" class="primary">
-            Start demo <span>↗</span>
+            开始演示 <span>↗</span>
           </button>
         </div>
       </form>
       <div class="toolbar">
         <div class="status">
           <span class="dot" id="status-dot"></span
-          ><span id="status" role="status">Ready to explore</span>
+          ><span id="status" role="status">准备就绪</span>
         </div>
-        <div class="controls"><label class="overlay-control"><input name="pace" id="pace" type="checkbox"> Slow motion</label>
+        <div class="controls"><label class="overlay-control"><input name="pace" id="pace" type="checkbox"> 慢速播放</label>
           <label class="overlay-control"
             ><input name="overlays" id="overlays" type="checkbox" checked />
-            Targets</label
-          ><button type="button" id="choose" disabled>Choose next</button
-          ><button type="button" id="execute" disabled>Execute choice</button
-          ><button type="button" id="auto" disabled>Run automatically</button
-          ><button type="button" id="stop" hidden>Pause</button>
+            目标标记</label
+          ><button type="button" id="choose" disabled>选择下一步</button
+          ><button type="button" id="execute" disabled>执行所选</button
+          ><button type="button" id="auto" disabled>自动运行</button
+          ><button type="button" id="stop" hidden>暂停</button>
         </div>
       </div>
       <div id="error" role="alert" hidden></div>
@@ -64,79 +64,79 @@ Find one-way flights from Zurich to London on September 20, 2026, for one adult 
         <div class="browser-panel">
           <div class="browser-bar">
             <div class="traffic"><b></b><b></b><b></b></div>
-            <span id="url">Local demo browser</span
-            ><span class="live">LIVE</span>
+            <span id="url">本地演示浏览器</span
+            ><span class="live">实时</span>
           </div>
           <div class="viewport" id="viewport">
             <div class="empty" id="empty">
               <p class="empty-symbol">[ ↗ ]</p>
-              <h2>Watch the decision happen.</h2>
+              <h2>观察决策如何产生。</h2>
               <p>
-                Start a task to see a real browser, its available<br />actions,
-                and the model's choice.
+                启动任务后可以看到真实浏览器、它的可用<br />操作，
+                以及模型的选择。
               </p>
             </div>
             <img
               id="screenshot"
-              alt="Live screenshot of the controlled browser"
+              alt="受控浏览器的实时截图"
               hidden
             />
             <div id="targets"></div>
           </div>
           <div class="browser-footer">
-            <span id="page-title">Isolated demo tab</span
-            ><span>AX tree → typed actions → CDP</span>
+            <span id="page-title">隔离的演示标签页</span
+            ><span>AX 树 → 类型化操作 → CDP</span>
           </div>
         </div>
         <aside>
           <div class="aside-header">
             <div>
-              <p class="eyebrow">NEXT ACTION</p>
-              <h2 id="choice-title">Waiting for a page</h2>
+              <p class="eyebrow">下一步操作</p>
+              <h2 id="choice-title">等待页面观察</h2>
             </div>
-            <span id="action-count">0 options</span>
+            <span id="action-count">0 个选项</span>
           </div>
           <div id="plan" class="plan"></div>
           <div class="metrics">
-            <div><span>Decision time</span><strong id="latency">—</strong></div>
+            <div><span>决策耗时</span><strong id="latency">—</strong></div>
             <div>
-              <span>Target confidence</span><strong id="confidence">—</strong>
+              <span>目标置信度</span><strong id="confidence">—</strong>
             </div>
             <div>
-              <span>Operation</span
+              <span>操作</span
               ><strong id="completion">—</strong>
             </div>
           </div>
           <div id="operation-choices" class="operation-choices"></div>
           <p class="distribution-label">
-            Indexed elements
-            <span id="ranking-note">Choose next to rank</span>
+            索引到的元素
+            <span id="ranking-note">点击「选择下一步」进行排序</span>
           </p>
           <div id="choices" class="choices">
-            <p class="muted">Available actions will appear here.</p>
+            <p class="muted">可用操作会显示在这里。</p>
           </div>
           <p class="aside-note">
-            Operation and target are separate choices in one request.<br />Text is generated only for TYPE_TEXT.
+            操作与目标是同一次请求中的两个独立选择。<br />只有 TYPE_TEXT 才生成文本。
           </p>
         </aside>
       </section>
       <section class="trace">
         <div class="trace-heading">
-          <h2>Decision trail <span id="step-count">0 actions</span></h2>
-          <button type="button" id="download" disabled>Export trace ↓</button>
+          <h2>决策轨迹 <span id="step-count">0 个动作</span></h2>
+          <button type="button" id="download" disabled>导出轨迹 ↓</button>
         </div>
         <div id="history">
-          <p class="muted">Each executed action leaves an observed result.</p>
+          <p class="muted">每个已执行的动作都会留下观察到的结果。</p>
         </div>
       </section>
       <details>
-        <summary>What the model sees</summary>
+        <summary>模型看到的内容</summary>
         <pre id="model-state">
-Start a demo to inspect its structured state.</pre>
+启动演示后可查看其结构化状态。</pre>
       </details>
       <footer>
-        <span>Browser Use × TypeSafe · Experimental baseline</span
-        ><span id="helper">Text helper loading</span>
+        <span>Browser Use × TypeSafe · 实验性基线</span
+        ><span id="helper">文本助手加载中</span>
       </footer>
     </main>
     <script type="module" src="/app.js"></script>

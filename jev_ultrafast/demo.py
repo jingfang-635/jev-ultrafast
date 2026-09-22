@@ -23,7 +23,7 @@ AGENT = None
 def load_environment():
     path = Path.cwd() / ".env"
     if path.exists():
-        for line in path.read_text().splitlines():
+        for line in path.read_text(encoding="utf-8").splitlines():
             if "=" in line and not line.startswith("#"):
                 key, value = line.split("=", 1)
                 os.environ.setdefault(key, value)
@@ -46,10 +46,10 @@ def command(name, body):
     if name == "reset":
         scenario = body.get("scenario", "flights")
         if scenario not in {"travel", "research", "flights"}:
-            raise ValueError("Unknown demo scenario")
+            raise ValueError("未知的演示场景")
         goal = body.get("goal", "").strip()
         if not goal or len(goal) > 2000:
-            raise ValueError("Enter 1–2,000 characters")
+            raise ValueError("请输入 1–2,000 个字符")
         close_browser()
         AGENT = Agent(
             "https://www.google.com/travel/flights?hl=en"
@@ -62,7 +62,7 @@ def command(name, body):
         AGENT.state["scenario"] = scenario
     else:
         if AGENT is None:
-            raise ValueError("Start a demo first")
+            raise ValueError("请先启动演示")
         AGENT.command(name, body)
     return response_state()
 
@@ -80,7 +80,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.headers.get("Host") != f"127.0.0.1:{PORT}":
-            return self.send(403, "Forbidden", "text/plain")
+            return self.send(403, "禁止访问", "text/plain")
         path = urlparse(self.path).path
         if path == "/api/state":
             with LOCK:
@@ -96,9 +96,9 @@ class Handler(BaseHTTPRequestHandler):
             "/fixture.html": ("fixture.html", "text/html"),
         }
         if path not in files:
-            return self.send(404, "Not found", "text/plain")
+            return self.send(404, "未找到", "text/plain")
         name, mime = files[path]
-        content = (ROOT / "static" / name).read_text().replace("__TOKEN__", TOKEN)
+        content = (ROOT / "static" / name).read_text(encoding="utf-8").replace("__TOKEN__", TOKEN)
         self.send(200, content, mime + "; charset=utf-8")
 
     def do_POST(self):
@@ -107,20 +107,20 @@ class Handler(BaseHTTPRequestHandler):
             or self.headers.get("X-Demo-Token") != TOKEN
             or self.headers.get("Origin") not in (None, ORIGIN)
         ):
-            return self.send(403, json.dumps({"error": "Local demo requests only"}))
+            return self.send(403, json.dumps({"error": "仅接受本地演示请求"}))
         if not LOCK.acquire(blocking=False):
-            return self.send(409, json.dumps({"error": "A browser step is already running"}))
+            return self.send(409, json.dumps({"error": "已有一个浏览器步骤正在运行"}))
         try:
             length = int(self.headers.get("Content-Length", "0"))
             if not 0 < length < 8192:
-                raise ValueError("Invalid request size")
+                raise ValueError("请求大小无效")
             body = json.loads(self.rfile.read(length))
             result = command(self.path.removeprefix("/api/"), body)
             self.send(200, json.dumps(result))
         except (ValueError, RuntimeError, TimeoutError) as error:
             self.send(400, json.dumps({"error": str(error)}))
         except Exception:
-            self.send(500, json.dumps({"error": "Local demo failed; no automatic retry. Reset to recover."}))
+            self.send(500, json.dumps({"error": "本地演示失败；不会自动重试。重置后即可恢复。"}))
         finally:
             LOCK.release()
 

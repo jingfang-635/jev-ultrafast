@@ -61,7 +61,7 @@ cp .env.example .env
 uv run jev
 ```
 
-Open **http://127.0.0.1:8766** and click **Start demo → Run automatically**. The inspector shows numbered elements, operation probabilities, target probabilities, and executed actions. **Choose next** pauses before execution.
+Open **http://127.0.0.1:8766** (Chinese-language inspector) and click **开始演示 → 自动运行**. The inspector shows numbered elements, operation probabilities, target probabilities, and executed actions. **选择下一步** pauses before execution; the goal sent to the model stays in English.
 
 Chrome connects through [Browser Harness](https://github.com/browser-use/browser-harness), installed by `uv sync`. Run `uv run browser-harness --doctor` if it needs connecting. Allow remote debugging in Chrome when prompted.
 

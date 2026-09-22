@@ -10,7 +10,7 @@ from browser_harness.admin import ensure_daemon
 from browser_harness.helpers import cdp
 
 # Atomically read visible content and controls, preserving actual DOM node identity.
-READ_STATE = Path(__file__).with_name("snapshot.js").read_text()
+READ_STATE = Path(__file__).with_name("snapshot.js").read_text(encoding="utf-8")
 MARKER = f"(() => {{ const state={READ_STATE}; return state?.marker ?? null; }})()"
 
 class StalePage(ValueError):
@@ -25,6 +25,17 @@ class Browser:
         self.call("Emulation.setDeviceMetricsOverride", width=1120, height=780, deviceScaleFactor=1, mobile=False)
         # Keep rAF/menus rendering in an owned background tab, without activating the user's Chrome tab.
         self.call("Emulation.setFocusEmulationEnabled", enabled=True)
+        # Dedicated automation window: keep the tab composited even when it is
+        # backgrounded or the window is minimized, otherwise Page.captureScreenshot
+        # stalls waiting for a frame and times out. Activate the tab (harmless in
+        # a dedicated instance), pin the lifecycle to active, and keep a tiny
+        # low-rate screencast running so frames are produced in every state.
+        cdp("Target.activateTarget", targetId=self.target)
+        try:
+            self.call("Page.setWebLifecycleOverride", state="active")
+        except RuntimeError:
+            pass
+        self.call("Page.startScreencast", format="jpeg", quality=30, maxWidth=320, maxHeight=200, everyNthFrame=1)
         self.call("Page.navigate", url=url)
         deadline = time.monotonic() + 15
         while time.monotonic() < deadline:
@@ -108,7 +119,14 @@ class Browser:
 
     def close(self):
         if self.target:
-            cdp("Target.closeTarget", targetId=self.target)
+            try:
+                self.call("Page.stopScreencast")
+            except RuntimeError:
+                pass
+            try:
+                cdp("Target.closeTarget", targetId=self.target)
+            except RuntimeError:
+                pass  # The browser may have exited; a fresh demo must still open.
             self.target = None
 
 
@@ -190,5 +208,10 @@ def browser_operation(request):
         raise StalePage("Document is navigating")
     info["fingerprint"] = fingerprint(info)
     if request.get("screenshot", True):
-        info["screenshot"] = call("Page.captureScreenshot", format="jpeg", quality=72)["data"]
+        # captureBeyondViewport forces a renderer-side capture. Without it a
+        # compositor that produces no frame (minimized/occluded window) stalls
+        # the call until the harness's 5s timeout kills the whole step.
+        info["screenshot"] = call(
+            "Page.captureScreenshot", format="jpeg", quality=72, captureBeyondViewport=True
+        )["data"]
     return info

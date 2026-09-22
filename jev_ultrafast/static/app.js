@@ -25,7 +25,7 @@ async function call(name, body = {}) {
     body: JSON.stringify(body),
   });
   const data = await response.json();
-  if (!response.ok) throw Error(data.error || "Request failed");
+  if (!response.ok) throw Error(data.error || "请求失败");
   state = data;
   render();
   return data;
@@ -60,7 +60,7 @@ async function perform(fn, label) {
     }
     $("error").textContent = error.message;
     $("error").hidden = false;
-    $("status").textContent = "Paused · needs attention";
+    $("status").textContent = "已暂停 · 需要处理";
   } finally {
     busy = false;
     controls();
@@ -68,7 +68,7 @@ async function perform(fn, label) {
 }
 function render() {
   if (!state) return;
-  $("helper").textContent = `Text helper · ${state.text_model}`;
+  $("helper").textContent = `文本助手 · ${state.text_model}`;
   $("plan").innerHTML = (state.plan || [])
     .map(
       (goal, i) =>
@@ -80,11 +80,11 @@ function render() {
       state.decision ||
       (state.status === "done" ? state.decisions?.at(-1) : null);
   const labels = {
-    idle: "Ready to explore",
-    ready: "Page observed · ready for a decision",
-    predicted: "Choice ready · inspect or execute",
-    done: "Jev reports complete · inspect the page",
-    blocked: "Stopped · no supported next action",
+    idle: "准备就绪",
+    ready: "页面已观察 · 等待决策",
+    predicted: "选择已就绪 · 可检查或执行",
+    done: "Jev 报告已完成 · 请检查页面",
+    blocked: "已停止 · 没有受支持的下一步操作",
   };
   $("status").textContent = labels[state.status] || state.status;
   if (!page) {
@@ -96,15 +96,15 @@ function render() {
   $("screenshot").src = `data:image/jpeg;base64,${page.screenshot}`;
   $("url").textContent = page.url;
   $("page-title").textContent = page.title;
-  $("action-count").textContent = `${state.elements.length} elements`;
+  $("action-count").textContent = `${state.elements.length} 个元素`;
   const chosen = page.actions.find((a) => a.id === d?.choice);
   $("choice-title").textContent = d
     ? chosen?.label || d.choice
-    : "Choose an action";
+    : "选择一个操作";
   $("latency").textContent = d ? `${d.latency_ms} ms` : "—";
   $("confidence").textContent = d?.target_confidence != null ? percent(d.target_confidence) : "—";
   $("completion").textContent = d ? d.operation : "—";
-  $("ranking-note").textContent = d ? "Ranked by Jev" : "Unranked";
+  $("ranking-note").textContent = d ? "由 Jev 排序" : "未排序";
   const op = Object.entries(d?.operation_probabilities || {}).sort((a,b)=>b[1]-a[1]);
   $("operation-choices").innerHTML = op.map(([name,p]) =>
     `<span class="operation-choice ${name === d.operation ? 'best' : ''}">${escape(name)} <b>${percent(p)}</b></span>`).join('');
@@ -115,7 +115,7 @@ function render() {
   if (d) elements.sort((a,b)=>probability(b)-probability(a));
   $("choices").innerHTML = elements.map(e => {
     const p = probability(e);
-    return `<div class="choice ${selectedIndex === e.index ? 'best' : ''}" data-action="${escape(e.index)}"><span class="choice-id">[${escape(e.index)}]</span><div class="choice-label">${escape(e.label)}<small>${escape(e.role)} · ${escape(e.operations.join(' / '))}${e.value ? ' · '+escape(e.value) : ''}${e.checked !== undefined ? ' · checked '+escape(e.checked) : ''}</small>${p >= 0 ? `<div class="bar" style="--probability:${p*100}%"></div>` : ''}</div><span class="probability">${p >= 0 ? percent(p) : '—'}</span></div>`;
+    return `<div class="choice ${selectedIndex === e.index ? 'best' : ''}" data-action="${escape(e.index)}"><span class="choice-id">[${escape(e.index)}]</span><div class="choice-label">${escape(e.label)}<small>${escape(e.role)} · ${escape(e.operations.join(' / '))}${e.value ? ' · 值: '+escape(e.value) : ''}${e.checked !== undefined ? ' · 已勾选: '+escape(e.checked) : ''}</small>${p >= 0 ? `<div class="bar" style="--probability:${p*100}%"></div>` : ''}</div><span class="probability">${p >= 0 ? percent(p) : '—'}</span></div>`;
   }).join('');
   const targets = new Map();
   for (const a of page.actions) if (a.rect && !targets.has(a.node)) targets.set(a.node, a);
@@ -128,11 +128,11 @@ function render() {
     ? state.history
         .map(
           (h) =>
-            `<div class="trace-row"><span class="number">${String(h.step).padStart(2, "0")}</span><div>${escape(h.action)}${h.text ? ` <b>“${escape(h.text)}”</b><small>${escape(h.text_helper)}</small>` : ""}</div><span class="time">${h.latency_ms} ms · ${percent(h.probability)}</span><span class="effect">${h.page_changed ? "Page changed" : "No change observed"}</span></div>`,
+            `<div class="trace-row"><span class="number">${String(h.step).padStart(2, "0")}</span><div>${escape(h.action)}${h.text ? ` <b>“${escape(h.text)}”</b><small>${escape(h.text_helper)}</small>` : ""}</div><span class="time">${h.latency_ms} ms · ${percent(h.probability)}</span><span class="effect">${h.page_changed ? "页面已变化" : "未观察到变化"}</span></div>`,
         )
         .join("")
-    : '<p class="muted">Each executed action leaves an observed result.</p>';
-  $("step-count").textContent = `${state.history.length} actions · ${(state.elapsed_ms / 1000).toFixed(2)} s`;
+    : '<p class="muted">每个已执行的动作都会留下观察到的结果。</p>';
+  $("step-count").textContent = `${state.history.length} 个动作 · ${(state.elapsed_ms / 1000).toFixed(2)} 秒`;
   $("model-state").textContent = JSON.stringify(
     d?.request || {
       goal: state.goal,
@@ -151,19 +151,19 @@ $("task-form").addEventListener("submit", (event) => {
   perform(
     () =>
       call("reset", { scenario: $("scenario").value, goal: $("goal").value }),
-    "Opening a fresh browser…",
+    "打开本地演示浏览器…",
   );
 });
 $("scenario").addEventListener("change", () => {
   $("goal").value = goals[$("scenario").value];
 });
 $("choose").addEventListener("click", () =>
-  perform(() => call("predict"), "Jev is comparing the actions…"),
+  perform(() => call("predict"), "Jev 正在比较各操作…"),
 );
 $("execute").addEventListener("click", () =>
   perform(
     () => call("act", { fingerprint: state.page.fingerprint }),
-    "Executing the choice…",
+    "正在执行所选操作…",
   ),
 );
 $("auto").addEventListener("click", () =>
@@ -171,7 +171,7 @@ $("auto").addEventListener("click", () =>
     automatic = true;
     controls();
     for (let i = 0; i < state.max_steps * 2 && automatic; i++) {
-      $("status").textContent = "Running…";
+      $("status").textContent = "运行中…";
       if ($("pace").checked) {
         await call("predict");
         await new Promise(resolve => setTimeout(resolve, 450));
@@ -183,11 +183,11 @@ $("auto").addEventListener("click", () =>
       if (["done", "blocked"].includes(state.status)) break;
     }
     automatic = false;
-  }, "Running the browser…"),
+  }, "正在运行浏览器…"),
 );
 $("stop").addEventListener("click", () => {
   automatic = false;
-  $("status").textContent = "Pausing after the current request…";
+  $("status").textContent = "将在当前请求完成后暂停…";
   controls();
 });
 $("overlays").addEventListener("change", () => {
@@ -240,5 +240,5 @@ fetch("/api/state")
     render();
   })
   .catch(() => {
-    $("status").textContent = "Cannot reach local demo server";
+    $("status").textContent = "无法连接本地演示服务器";
   });
