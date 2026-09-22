@@ -276,6 +276,48 @@ def test_fingerprint_tracks_values_and_identity_not_screenshots():
     assert fingerprint(p) != fingerprint(other)
 
 
+def test_local_cdp_url_without_listener_launches_a_headless_browser(monkeypatch):
+    import jev_ultrafast.browser as browser
+
+    monkeypatch.setenv("BU_CDP_URL", "http://127.0.0.1:9333")
+    reach = Mock(side_effect=[False, True])  # Port dead at check time, alive right after launch.
+    monkeypatch.setattr(browser, "_devtools_reachable", reach)
+    monkeypatch.setattr(browser, "_automation_browser_binary", Mock(return_value="chrome"))
+    spawned = Mock(returncode=None, poll=Mock(return_value=None))
+    monkeypatch.setattr(browser.subprocess, "Popen", Mock(return_value=spawned))
+    browser._LAUNCHED_BROWSERS.clear()  # Only mocked Popen results land here; keep the registry clean.
+    browser._ensure_automation_browser()
+    assert reach.call_args_list[0].args[0] == "http://127.0.0.1:9333"
+    flags = browser.subprocess.Popen.call_args.args[0]
+    assert "--headless=new" in flags and "--remote-debugging-port=9333" in flags
+
+
+def test_reachable_cdp_url_skips_the_headless_launch(monkeypatch):
+    import jev_ultrafast.browser as browser
+
+    monkeypatch.setenv("BU_CDP_URL", "http://127.0.0.1:9333")
+    monkeypatch.setattr(browser, "_devtools_reachable", Mock(return_value=True))
+    monkeypatch.setattr(browser.subprocess, "Popen", Mock(side_effect=AssertionError("must not spawn")))
+    browser._ensure_automation_browser()
+
+
+def test_remote_cdp_url_never_spawns_a_local_browser(monkeypatch):
+    import jev_ultrafast.browser as browser
+
+    monkeypatch.setenv("BU_CDP_URL", "http://gateway.example:9333")
+    monkeypatch.setattr(browser.subprocess, "Popen", Mock(side_effect=AssertionError("must not spawn")))
+    browser._ensure_automation_browser()
+
+
+def test_opt_out_disables_the_headless_launch(monkeypatch):
+    import jev_ultrafast.browser as browser
+
+    monkeypatch.setenv("BU_CDP_URL", "http://127.0.0.1:9333")
+    monkeypatch.setenv("BU_AUTOMATION_BROWSER", "0")
+    monkeypatch.setattr(browser.subprocess, "Popen", Mock(side_effect=AssertionError("must not spawn")))
+    browser._ensure_automation_browser()
+
+
 @pytest.mark.parametrize("changed", ["Departure", "Where from?", "Where to?", "year"])
 def test_flight_verification_rejects_wrong_trip(changed):
     from examples.flights import verify
@@ -318,3 +360,63 @@ def test_navigation_during_prediction_reobserves_without_action(runner):
     assert runner.state["status"] == "ready"
     assert runner.state["decision"] is None
     runner.state["browser"].act.assert_not_called()
+
+
+def _automation_env(monkeypatch, url, binary="C:/browsers/chrome.exe", reachable=False):
+    import jev_ultrafast.browser as browser
+
+    monkeypatch.setenv("BU_CDP_URL", url)
+    monkeypatch.delenv("BU_AUTOMATION_BROWSER", raising=False)
+    monkeypatch.setattr(browser, "_automation_browser_binary", Mock(return_value=binary))
+    # When a launch is expected, the port is dead at the first check and alive right after spawn.
+    reach = Mock(return_value=reachable) if reachable else Mock(side_effect=[False, True])
+    monkeypatch.setattr(browser, "_devtools_reachable", reach)
+    spawn = Mock(return_value=Mock(poll=Mock(return_value=None), returncode=None))
+    monkeypatch.setattr(browser.subprocess, "Popen", spawn)
+    browser._LAUNCHED_BROWSERS.clear()
+    return browser, spawn
+
+
+def test_headless_automation_browser_launches_for_silent_local_port(monkeypatch):
+    browser, spawn = _automation_env(monkeypatch, "http://127.0.0.1:9333")
+    browser._ensure_automation_browser()
+    assert spawn.call_count == 1
+    args = spawn.call_args.args[0]
+    assert args[0] == "C:/browsers/chrome.exe"
+    assert "--headless=new" in args and "--remote-debugging-port=9333" in args
+    assert any(str(arg).startswith("--user-data-dir=") for arg in args)
+    assert "about:blank" in args
+
+
+def test_automation_browser_skipped_when_devtools_already_listens(monkeypatch):
+    browser, spawn = _automation_env(monkeypatch, "http://127.0.0.1:9333", reachable=True)
+    browser._ensure_automation_browser()
+    spawn.assert_not_called()
+
+
+def test_automation_browser_opt_out_and_non_local_urls_are_respected(monkeypatch):
+    for url in ("http://10.0.0.5:9222", "wss://gateway.example/", "http://localhost:8765/x"):
+        browser, spawn = _automation_env(monkeypatch, url)
+        browser._ensure_automation_browser()
+        spawn.assert_not_called()
+    browser, spawn = _automation_env(monkeypatch, "http://127.0.0.1:9333")
+    monkeypatch.setenv("BU_AUTOMATION_BROWSER", "0")
+    browser._ensure_automation_browser()
+    spawn.assert_not_called()
+
+
+def test_automation_browser_failure_names_the_port(monkeypatch):
+    browser, _ = _automation_env(monkeypatch, "http://127.0.0.1:9333", binary=None)
+    with pytest.raises(RuntimeError, match="9333"):
+        browser._ensure_automation_browser()
+
+
+def test_no_local_bu_cdp_url_starts_nothing(monkeypatch):
+    import jev_ultrafast.browser as browser
+
+    monkeypatch.delenv("BU_CDP_URL", raising=False)
+    monkeypatch.delenv("BU_AUTOMATION_BROWSER", raising=False)
+    spawn = Mock()
+    monkeypatch.setattr(browser.subprocess, "Popen", spawn)
+    browser._ensure_automation_browser()
+    spawn.assert_not_called()

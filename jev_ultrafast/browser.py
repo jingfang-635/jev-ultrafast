@@ -1,9 +1,17 @@
 """Observed actions through Browser Harness; one CDP session, no per-step subprocess."""
 
+import atexit
 import hashlib
 import json
+import os
+import shutil
+import subprocess
 import sys
+import tempfile
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 from browser_harness.admin import ensure_daemon
@@ -13,12 +21,122 @@ from browser_harness.helpers import cdp
 READ_STATE = Path(__file__).with_name("snapshot.js").read_text(encoding="utf-8")
 MARKER = f"(() => {{ const state={READ_STATE}; return state?.marker ?? null; }})()"
 
+_LOCAL_HOSTS = {"127.0.0.1", "localhost"}
+_AUTOMATION_PROFILE_ROOT = Path(tempfile.gettempdir()) / "jev-ultrafast-automation"
+_LAUNCHED_BROWSERS: list[subprocess.Popen] = []
+
+
+def _devtools_reachable(url, timeout=1.5):
+    try:
+        urllib.request.urlopen(f"{url.rstrip('/')}/json/version", timeout=timeout)
+    except urllib.error.HTTPError:
+        return True  # A DevTools listener answered; the harness validates the endpoint itself.
+    except OSError:
+        return False
+    return True
+
+
+def _automation_browser_binary():
+    for key in ("BH_CHROME_PATH", "CHROME_PATH"):
+        raw = (os.environ.get(key) or "").strip()
+        if raw and Path(raw).expanduser().is_file():
+            return raw
+    if sys.platform == "win32":
+        relative = ("Google\\Chrome\\Application\\chrome.exe", "Microsoft\\Edge\\Application\\msedge.exe")
+        roots = [os.environ.get(k) for k in ("ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA")]
+        candidates = [Path(root) / name for name in relative for root in roots if root]
+    elif sys.platform == "darwin":
+        candidates = [
+            Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+            Path("/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"),
+        ]
+    else:
+        found = (
+            shutil.which("google-chrome-stable"),
+            shutil.which("google-chrome"),
+            shutil.which("chromium-browser"),
+            shutil.which("chromium"),
+            shutil.which("microsoft-edge"),
+            shutil.which("microsoft-edge-stable"),
+        )
+        candidates = [Path(path) for path in found if path]
+    return next((str(path) for path in candidates if path.is_file()), None)
+
+
+def _terminate_launched_browsers():
+    for process in _LAUNCHED_BROWSERS:
+        if process.poll() is None:
+            process.terminate()
+
+
+def _ensure_automation_browser():
+    """Start a dedicated headless browser when BU_CDP_URL names a local DevTools
+    port with no listener. The demo then shows everything inside the inspector;
+    no external browser window opens on the desktop. Set BU_AUTOMATION_BROWSER=0
+    to keep the original connect-only behavior."""
+    if os.environ.get("BU_AUTOMATION_BROWSER", "").strip().lower() in {"0", "false", "no", "off"}:
+        return
+    url = os.environ.get("BU_CDP_URL")
+    if not url:
+        return
+    endpoint = urllib.parse.urlparse(url)
+    if endpoint.scheme != "http" or endpoint.hostname not in _LOCAL_HOSTS or not endpoint.port:
+        return  # Remote or gateway endpoints are provisioned elsewhere.
+    if endpoint.path not in ("", "/") or endpoint.query or endpoint.fragment:
+        return  # A pathful URL is not a bare DevTools endpoint; keep connect-only behavior.
+    if _devtools_reachable(url):
+        return
+    binary = _automation_browser_binary()
+    if binary is None:
+        raise RuntimeError(
+            f"BU_CDP_URL={url} has no listener, and no Chrome/Edge installation was found to start a "
+            "headless automation browser. Install Chrome or Edge, or start the dedicated browser yourself "
+            "with --remote-debugging-port=<port> --user-data-dir=<dir>."
+        )
+    spawn_kwargs = (
+        {"creationflags": subprocess.CREATE_NO_WINDOW}
+        if sys.platform == "win32"
+        else {"start_new_session": True}
+    )
+    process = subprocess.Popen(
+        [
+            binary,
+            f"--remote-debugging-port={endpoint.port}",
+            f"--user-data-dir={_AUTOMATION_PROFILE_ROOT / f'port-{endpoint.port}'}",
+            "--headless=new",
+            "--window-size=1120,780",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "about:blank",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        **spawn_kwargs,
+    )
+    _LAUNCHED_BROWSERS.append(process)
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            _LAUNCHED_BROWSERS.remove(process)
+            raise RuntimeError(
+                f"The headless automation browser for BU_CDP_URL={url} exited with code {process.returncode}; "
+                "another automation browser may already own this profile."
+            )
+        if _devtools_reachable(url, timeout=1):
+            return
+        time.sleep(0.2)
+    raise RuntimeError(f"The headless automation browser did not expose {url} within 30s.")
+
+
+atexit.register(_terminate_launched_browsers)
+
 class StalePage(ValueError):
     """A decision no longer refers to the observed page."""
 
 
 class Browser:
     def __init__(self, url):
+        _ensure_automation_browser()
         ensure_daemon()
         self.target = cdp("Target.createTarget", url="about:blank", background=True)["targetId"]
         self.session = cdp("Target.attachToTarget", targetId=self.target, flatten=True)["sessionId"]
